@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>10SHG</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg:#181a12;
+    --panel:#232619;
+    --panel-2:#2b2f1f;
+    --line:#3c4128;
+    --camo-a:#3d4530;
+    --camo-b:#565f42;
+    --camo-c:#8a7a4a;
+    --camo-d:#141610;
+    --text:#e9e4d2;
+    --text-dim:#a7a68f;
+    --accent:#c9a84c;
+    --accent-2:#7c9473;
+    --danger:#b5482f;
+    --mono:"D2Coding","JetBrains Mono","Consolas",monospace;
+    --sans:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);}
+  #app{min-height:100vh;position:relative;}
+
+  /* ---------- camo pattern ---------- */
+  .camo{
+    background-color:var(--camo-d);
+    background-image:
+      radial-gradient(ellipse 90px 60px at 10% 20%, var(--camo-a) 40%, transparent 41%),
+      radial-gradient(ellipse 120px 70px at 60% 10%, var(--camo-b) 40%, transparent 41%),
+      radial-gradient(ellipse 100px 80px at 85% 60%, var(--camo-c) 35%, transparent 36%),
+      radial-gradient(ellipse 140px 90px at 30% 80%, var(--camo-a) 38%, transparent 39%),
+      radial-gradient(ellipse 80px 50px at 50% 50%, var(--camo-b) 35%, transparent 36%);
+    background-size: 400px 300px;
+    background-repeat:repeat;
+  }
+  .scanlines{
+    position:absolute;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(180deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, transparent 1px, transparent 3px);
+    mix-blend-mode:multiply;
+  }
+
+  /* ---------- gate ---------- */
+  #gate{
+    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    z-index:50;
+  }
+  #gate .gate-box{
+    background:rgba(20,22,15,0.9);
+    border:1px solid var(--accent);
+    padding:36px 30px;border-radius:6px;
+    width:min(340px,86vw);
+    text-align:center;
+    box-shadow:0 0 40px rgba(0,0,0,0.6);
+  }
+  #gate h1{
+    font-family:var(--mono);letter-spacing:6px;font-size:26px;margin:0 0 4px;color:var(--accent);
+  }
+  #gate p.sub{font-size:12px;color:var(--text-dim);margin:0 0 24px;letter-spacing:2px;}
+  #gate input{
+    width:100%;padding:12px;font-family:var(--mono);font-size:20px;letter-spacing:8px;text-align:center;
+    background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:4px;
+  }
+  #gate input:focus{outline:none;border-color:var(--accent);}
+  #gate button{
+    margin-top:14px;width:100%;padding:11px;background:var(--accent);border:none;border-radius:4px;
+    font-family:var(--mono);font-weight:700;letter-spacing:3px;cursor:pointer;font-size:14px;
+  }
+  #gate .err{color:var(--danger);font-size:12px;margin-top:10px;min-height:16px;font-family:var(--mono);}
+
+  /* ---------- header ---------- */
+  header{
+    padding:22px 20px 18px;position:relative;overflow:hidden;
+    border-bottom:1px solid var(--line);
+  }
+  header .inner{position:relative;z-index:2;}
+  header h1{
+    font-family:var(--mono);font-size:22px;letter-spacing:5px;margin:0;color:var(--accent);
+    text-shadow:0 0 12px rgba(201,168,76,0.35);
+  }
+  header p{margin:4px 0 0;font-size:12px;color:var(--text-dim);letter-spacing:2px;font-family:var(--mono);}
+
+  nav{display:flex;gap:0;border-bottom:1px solid var(--line);background:var(--panel);}
+  nav button{
+    flex:1;padding:13px 8px;background:none;border:none;color:var(--text-dim);
+    font-family:var(--mono);font-size:13px;letter-spacing:2px;cursor:pointer;border-bottom:2px solid transparent;
+  }
+  nav button.active{color:var(--accent);border-bottom-color:var(--accent);background:var(--panel-2);}
+
+  main{max-width:640px;margin:0 auto;padding:22px 16px 60px;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  /* ---------- search ---------- */
+  .search-row{display:flex;gap:8px;margin-bottom:18px;}
+  .search-row input{
+    flex:1;padding:12px 14px;background:var(--panel);border:1px solid var(--line);color:var(--text);
+    border-radius:4px;font-family:var(--mono);font-size:15px;
+  }
+  .search-row input:focus{outline:none;border-color:var(--accent);}
+  .search-row button{
+    padding:0 18px;background:var(--accent-2);border:none;border-radius:4px;color:#12140c;font-weight:700;
+    font-family:var(--mono);cursor:pointer;letter-spacing:1px;
+  }
+
+  .tag-card{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px 22px 18px;
+    position:relative;margin-bottom:16px;
+  }
+  .tag-card::before{
+    content:"";position:absolute;top:-11px;left:50%;transform:translateX(-50%);
+    width:26px;height:22px;border:3px solid var(--line);border-radius:50%;background:var(--bg);
+  }
+  .tag-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px dashed var(--line);font-size:14px;}
+  .tag-row:last-child{border-bottom:none;}
+  .tag-row .k{color:var(--text-dim);font-family:var(--mono);font-size:12px;letter-spacing:1px;}
+  .tag-row .v{font-weight:600;text-align:right;}
+  .tag-row .v.placeholder{color:var(--accent);font-weight:400;font-style:italic;}
+  .tag-id{
+    font-family:var(--mono);color:var(--accent);letter-spacing:2px;font-size:13px;margin-bottom:10px;
+  }
+  .tag-name{font-size:20px;font-weight:800;margin-bottom:14px;}
+
+  .btn{
+    display:inline-block;padding:10px 16px;border-radius:4px;border:1px solid var(--line);
+    background:var(--panel-2);color:var(--text);font-family:var(--mono);font-size:13px;cursor:pointer;letter-spacing:1px;
+  }
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#12140c;font-weight:700;}
+  .btn.ghost{background:none;}
+  .btn-row{display:flex;gap:8px;margin-top:14px;}
+  .empty,.hint{color:var(--text-dim);font-size:13px;line-height:1.7;}
+  .hint code{background:var(--panel-2);padding:1px 5px;border-radius:3px;}
+
+  /* ---------- edit modal ---------- */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(10,11,7,0.7);display:none;align-items:center;justify-content:center;z-index:40;padding:16px;
+  }
+  .modal-overlay.active{display:flex;}
+  .modal{
+    background:var(--panel);border:1px solid var(--accent);border-radius:8px;padding:24px;width:min(380px,100%);
+  }
+  .modal h3{margin:0 0 6px;font-family:var(--mono);color:var(--accent);letter-spacing:1px;}
+  .modal p{color:var(--text-dim);font-size:13px;margin:0 0 18px;}
+  .modal label{display:block;font-size:12px;color:var(--text-dim);font-family:var(--mono);margin:12px 0 5px;}
+  .modal input{
+    width:100%;padding:10px;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:4px;font-size:14px;
+  }
+  .modal input:focus{outline:none;border-color:var(--accent);}
+
+  /* ---------- table view ---------- */
+  .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;}
+  table{border-collapse:collapse;width:100%;min-width:640px;font-size:13px;}
+  th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap;}
+  th{
+    position:sticky;top:0;background:var(--panel-2);color:var(--accent);font-family:var(--mono);
+    letter-spacing:1px;font-size:11px;
+  }
+  tbody tr:nth-child(even){background:rgba(255,255,255,0.02);}
+  td.placeholder{color:var(--text-dim);font-style:italic;}
+
+  /* ---------- board ---------- */
+  .post-form textarea{
+    width:100%;padding:12px;background:var(--panel);border:1px solid var(--line);color:var(--text);
+    border-radius:6px;font-family:var(--sans);font-size:14px;resize:vertical;min-height:70px;
+  }
+  .post-form textarea:focus{outline:none;border-color:var(--accent);}
+  .post-form{margin-bottom:20px;}
+  .post{
+    background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 16px;margin-bottom:10px;
+    border-left:3px solid var(--accent-2);
+  }
+  .post .meta{font-family:var(--mono);font-size:11px;color:var(--text-dim);letter-spacing:1px;margin-bottom:6px;}
+  .post .body{font-size:14px;line-height:1.6;white-space:pre-wrap;}
+  .comments{margin-top:12px;padding-top:10px;border-top:1px dashed var(--line);}
+  .comment{padding:7px 0 7px 14px;border-left:2px solid var(--line);margin-bottom:6px;}
+  .comment .meta{font-size:10px;color:var(--text-dim);font-family:var(--mono);margin-bottom:3px;}
+  .comment .body{font-size:13px;line-height:1.5;white-space:pre-wrap;}
+  .comment-form{display:flex;gap:6px;margin-top:8px;}
+  .comment-form input{
+    flex:1;padding:8px 10px;background:var(--bg);border:1px solid var(--line);color:var(--text);
+    border-radius:4px;font-size:13px;
+  }
+  .comment-form input:focus{outline:none;border-color:var(--accent);}
+  .comment-form button{
+    padding:0 12px;background:var(--accent-2);border:none;border-radius:4px;color:#12140c;font-weight:700;
+    font-family:var(--mono);font-size:12px;cursor:pointer;
+  }
+  .comment-toggle{
+    background:none;border:none;color:var(--accent);font-family:var(--mono);font-size:11px;
+    cursor:pointer;padding:0;letter-spacing:1px;
+  }
+
+  .status{font-family:var(--mono);font-size:12px;color:var(--text-dim);text-align:center;padding:30px 0;}
+  .status.err{color:var(--danger);}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="gate" class="camo">
+    <div class="scanlines"></div>
+    <div class="gate-box">
+      <h1>10SHG</h1>
+      <p class="sub">55사단 신교대 3중대 10생활관</p>
+      <input id="gateInput" maxlength="8" inputmode="numeric" placeholder="인증코드">
+      <button onclick="tryGate()">입장</button>
+      <div class="err" id="gateErr"></div>
+    </div>
+  </div>
+
+  <div id="main" style="display:none;">
+    <header class="camo">
+      <div class="scanlines"></div>
+      <div class="inner">
+        <h1>10SHG</h1>
+        <p>10생활관 인원 정보 &amp; 게시판</p>
+      </div>
+    </header>
+
+    <nav>
+      <button class="active" data-view="search" onclick="switchView('search')">조회</button>
+      <button data-view="table" onclick="switchView('table')">전체보기</button>
+      <button data-view="board" onclick="switchView('board')">익명게시판</button>
+    </nav>
+
+    <main>
+      <!-- 조회 -->
+      <div class="view active" id="view-search">
+        <div class="search-row">
+          <input id="searchInput" placeholder="교번 입력 (예: 24-01)" onkeydown="if(event.key==='Enter')doSearch()">
+          <button onclick="doSearch()">조회</button>
+        </div>
+        <div id="searchResult">
+          <p class="empty">교번을 입력하면 정보가 여기에 뜸.</p>
+        </div>
+      </div>
+
+      <!-- 전체보기 -->
+      <div class="view" id="view-table">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>교번</th><th>이름</th><th>출생년도</th><th>전화번호</th><th>인스타</th><th>자대</th></tr>
+            </thead>
+            <tbody id="tableBody">
+              <tr><td colspan="6" class="status">불러오는 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 익명게시판 -->
+      <div class="view" id="view-board">
+        <div class="post-form">
+          <textarea id="postInput" placeholder="익명으로 남길 말..."></textarea>
+          <div class="btn-row">
+            <button class="btn primary" onclick="submitPost()">게시</button>
+          </div>
+        </div>
+        <div id="boardList"><p class="empty">불러오는 중...</p></div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="editOverlay">
+    <div class="modal">
+      <h3 id="editStep1Title">진짜 너 맞아~~??</h3>
+      <p id="editStep1Sub">본인 정보만 수정해줘.</p>
+      <div id="editConfirmBox">
+        <input id="editConfirmInput" placeholder="확인 이라고 입력">
+        <div class="btn-row">
+          <button class="btn ghost" onclick="closeEdit()">취소</button>
+          <button class="btn primary" onclick="confirmEdit()">확인</button>
+        </div>
+      </div>
+      <div id="editFormBox" style="display:none;">
+        <label>전화번호</label>
+        <input id="editPhone">
+        <label>인스타</label>
+        <input id="editInsta">
+        <label>자대</label>
+        <input id="editUnit">
+        <div class="btn-row">
+          <button class="btn ghost" onclick="closeEdit()">취소</button>
+          <button class="btn primary" onclick="saveEdit()">저장</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* =========================================================
+   인원 데이터 (엑셀에서 추출해 직접 박아넣음, 25명)
+   새 인원 추가/대량 변경 시 이 배열을 갱신해서 다시 받아야 함.
+   개별 정보 수정은 사이트의 "수정" 기능으로 실시간 처리됨.
+   ========================================================= */
+const RAW_DATA = [
+{"교번":"221","이름":"최민규","출생년도":"06","전화번호":"010-5936-7726","인스타":"","자대":""},
+{"교번":"222","이름":"최범규","출생년도":"06","전화번호":"010-2716-8720","인스타":"","자대":""},
+{"교번":"223","이름":"최범준","출생년도":"06","전화번호":"010-8286-2685","인스타":"","자대":""},
+{"교번":"224","이름":"최성후","출생년도":"06","전화번호":"010-3566-6600","인스타":"","자대":""},
+{"교번":"225","이름":"최연서","출생년도":"01","전화번호":"010-7636-7572","인스타":"","자대":""},
+{"교번":"226","이름":"최예준","출생년도":"06","전화번호":"010-5646-2297","인스타":"","자대":""},
+{"교번":"227","이름":"최윤도","출생년도":"05","전화번호":"010-5839-8202","인스타":"","자대":""},
+{"교번":"228","이름":"최윤석","출생년도":"06","전화번호":"010-9570-8997","인스타":"","자대":""},
+{"교번":"229","이름":"최재원","출생년도":"03","전화번호":"010-6348-7057","인스타":"","자대":""},
+{"교번":"230","이름":"최재현","출생년도":"06","전화번호":"010-8537-2160","인스타":"","자대":""},
+{"교번":"231","이름":"최준환","출생년도":"04","전화번호":"010-3742-2085","인스타":"","자대":""},
+{"교번":"232","이름":"최태원","출생년도":"05","전화번호":"010-3899-7777","인스타":"","자대":""},
+{"교번":"233","이름":"최현빈","출생년도":"06","전화번호":"010-2599-3552","인스타":"","자대":""},
+{"교번":"234","이름":"최형욱","출생년도":"04","전화번호":"010-3597-4638","인스타":"","자대":""},
+{"교번":"235","이름":"최힘찬","출생년도":"06","전화번호":"010-8680-1499","인스타":"","자대":""},
+{"교번":"236","이름":"하재훈","출생년도":"05","전화번호":"010-3700-2596","인스타":"","자대":""},
+{"교번":"237","이름":"한가을","출생년도":"04","전화번호":"010-8530-8730","인스타":"","자대":""},
+{"교번":"238","이름":"한준영","출생년도":"06","전화번호":"010-4082-7759","인스타":"","자대":""},
+{"교번":"239","이름":"현유섭","출생년도":"06","전화번호":"010-2899-2835","인스타":"","자대":""},
+{"교번":"240","이름":"홍성훈","출생년도":"06","전화번호":"010-4038-8089","인스타":"","자대":""},
+{"교번":"241","이름":"홍준기","출생년도":"04","전화번호":"010-9243-2520","인스타":"","자대":""},
+{"교번":"242","이름":"홍준기","출생년도":"06","전화번호":"010-4163-7085","인스타":"","자대":""},
+{"교번":"243","이름":"황승건","출생년도":"06","전화번호":"010-6410-7716","인스타":"","자대":""},
+{"교번":"244","이름":"황인준","출생년도":"05","전화번호":"010-3910-4160","인스타":"","자대":""},
+{"교번":"245","이름":"황제호","출생년도":"05","전화번호":"010-4341-4007","인스타":"","자대":""}
+];
+const ACCESS_CODE = "6974";
+
+/* =========================================================
+   Firebase 설정 : Firebase 콘솔에서 복사한 config를 여기에 붙여넣어
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyBjaa2aGyaAYr_tBkOVeHMJazymfzHxfqY",
+  authDomain: "shg-7433b.firebaseapp.com",
+  projectId: "shg-7433b",
+  storageBucket: "shg-7433b.firebasestorage.app",
+  messagingSenderId: "4516342609",
+  appId: "1:4516342609:web:1fd76f40732cefc8850170",
+  measurementId: "G-HE4QCN28W2"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+let baseRows = [];      // 시트 원본
+let overlays = {};      // {교번: {전화번호,인스타,자대}} 사이트에서 덮어쓴 값 (공유저장소)
+let currentEditRow = null;
+
+function tryGate(){
+  const val = document.getElementById('gateInput').value.trim();
+  if(val === ACCESS_CODE){
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+    init();
+  }else{
+    document.getElementById('gateErr').textContent = '코드가 틀렸음';
+  }
+}
+
+function switchView(name){
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+}
+
+async function init(){
+  await loadOverlays();
+  baseRows = RAW_DATA;
+  renderTable();
+  await loadBoard();
+}
+
+function isEmpty(v){
+  if(v===undefined||v===null) return true;
+  const s = String(v).trim();
+  return s==='' || s.toLowerCase()==='nan';
+}
+
+function mergedRow(row){
+  const ov = overlays[row.교번] || {};
+  return {
+    교번: row.교번,
+    이름: row.이름,
+    출생년도: row.출생년도,
+    전화번호: isEmpty(ov.전화번호) ? row.전화번호 : ov.전화번호,
+    인스타: isEmpty(ov.인스타) ? row.인스타 : ov.인스타,
+    자대: isEmpty(ov.자대) ? row.자대 : ov.자대,
+  };
+}
+
+
+
+async function loadOverlays(){
+  try{
+    const snap = await db.collection('meta').doc('overlays').get();
+    overlays = snap.exists ? snap.data() : {};
+  }catch(e){
+    overlays = {};
+  }
+}
+async function saveOverlays(){
+  try{
+    await db.collection('meta').doc('overlays').set(overlays);
+  }catch(e){
+    alert('저장 실패, 다시 시도해줘');
+  }
+}
+
+function doSearch(){
+  const q = document.getElementById('searchInput').value.trim();
+  const box = document.getElementById('searchResult');
+  if(!q){ box.innerHTML = '<p class="empty">교번을 입력해줘.</p>'; return; }
+  const row = baseRows.find(r=>String(r.교번).trim()===q);
+  if(!row){
+    box.innerHTML = '<p class="empty">해당 교번 정보가 없음. 스펠링/형식 확인해줘.</p>';
+    return;
+  }
+  const m = mergedRow(row);
+  box.innerHTML = renderTagCard(m);
+}
+
+function renderTagCard(m){
+  const insta = isEmpty(m.인스타) ? '<span class="v placeholder">인스타 주소를 입력해라.</span>' : `<span class="v">${escapeHtml(m.인스타)}</span>`;
+  const unit = isEmpty(m.자대) ? '<span class="v placeholder">너의 자대는 어디니?</span>' : `<span class="v">${escapeHtml(m.자대)}</span>`;
+  return `
+    <div class="tag-card">
+      <div class="tag-id">교번 ${escapeHtml(m.교번)}</div>
+      <div class="tag-name">${escapeHtml(m.이름)}</div>
+      <div class="tag-row"><span class="k">출생년도</span><span class="v">${escapeHtml(m.출생년도)}</span></div>
+      <div class="tag-row"><span class="k">전화번호</span><span class="v">${escapeHtml(m.전화번호)}</span></div>
+      <div class="tag-row"><span class="k">인스타</span>${insta}</div>
+      <div class="tag-row"><span class="k">자대</span>${unit}</div>
+      <div class="btn-row">
+        <button class="btn" onclick='openEdit(${JSON.stringify(m.교번)})'>수정</button>
+      </div>
+    </div>`;
+}
+
+function escapeHtml(s){
+  return String(s===undefined||s===null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderTable(){
+  const tbody = document.getElementById('tableBody');
+  if(baseRows.length===0) return;
+  tbody.innerHTML = baseRows.map(r=>{
+    const m = mergedRow(r);
+    const insta = isEmpty(m.인스타) ? '<td class="placeholder">인스타 주소를 입력해라.</td>' : `<td>${escapeHtml(m.인스타)}</td>`;
+    const unit = isEmpty(m.자대) ? '<td class="placeholder">너의 자대는 어디니?</td>' : `<td>${escapeHtml(m.자대)}</td>`;
+    return `<tr><td>${escapeHtml(m.교번)}</td><td>${escapeHtml(m.이름)}</td><td>${escapeHtml(m.출생년도)}</td><td>${escapeHtml(m.전화번호)}</td>${insta}${unit}</tr>`;
+  }).join('');
+}
+
+function openEdit(gyobun){
+  currentEditRow = gyobun;
+  document.getElementById('editOverlay').classList.add('active');
+  document.getElementById('editConfirmBox').style.display = 'block';
+  document.getElementById('editFormBox').style.display = 'none';
+  document.getElementById('editConfirmInput').value = '';
+}
+function closeEdit(){
+  document.getElementById('editOverlay').classList.remove('active');
+  currentEditRow = null;
+}
+function confirmEdit(){
+  const v = document.getElementById('editConfirmInput').value.trim();
+  if(v !== '확인'){
+    alert('"확인" 이라고 정확히 입력해줘');
+    return;
+  }
+  const row = baseRows.find(r=>String(r.교번).trim()===String(currentEditRow));
+  const m = mergedRow(row);
+  document.getElementById('editPhone').value = isEmpty(m.전화번호) ? '' : m.전화번호;
+  document.getElementById('editInsta').value = isEmpty(m.인스타) ? '' : m.인스타;
+  document.getElementById('editUnit').value = isEmpty(m.자대) ? '' : m.자대;
+  document.getElementById('editConfirmBox').style.display = 'none';
+  document.getElementById('editFormBox').style.display = 'block';
+}
+async function saveEdit(){
+  overlays[currentEditRow] = {
+    전화번호: document.getElementById('editPhone').value.trim(),
+    인스타: document.getElementById('editInsta').value.trim(),
+    자대: document.getElementById('editUnit').value.trim(),
+  };
+  await saveOverlays();
+  renderTable();
+  doSearch();
+  closeEdit();
+}
+
+/* ---------------- 익명게시판 ---------------- */
+let boardPosts = [];
+async function loadBoard(){
+  try{
+    const snap = await db.collection('meta').doc('board').get();
+    boardPosts = snap.exists && snap.data().posts ? snap.data().posts : [];
+    let changed = false;
+    boardPosts.forEach(p=>{
+      if(!p.id){ p.id = uid(); changed = true; }
+      if(!p.comments){ p.comments = []; changed = true; }
+    });
+    if(changed) await saveBoard();
+  }catch(e){
+    boardPosts = [];
+  }
+  renderBoard();
+}
+async function saveBoard(){
+  try{
+    await db.collection('meta').doc('board').set({posts: boardPosts});
+  }catch(e){
+    alert('게시 실패, 다시 시도해줘');
+  }
+}
+function uid(){
+  return Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+}
+function renderBoard(){
+  const list = document.getElementById('boardList');
+  if(boardPosts.length===0){
+    list.innerHTML = '<p class="empty">아직 글 없음. 첫 글을 남겨봐.</p>';
+    return;
+  }
+  const sorted = [...boardPosts].sort((a,b)=>b.ts-a.ts);
+  list.innerHTML = sorted.map(p=>{
+    const d = new Date(p.ts);
+    const time = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    const comments = (p.comments||[]);
+    const commentsHtml = comments.map(c=>{
+      const cd = new Date(c.ts);
+      const ctime = `${cd.getMonth()+1}/${cd.getDate()} ${String(cd.getHours()).padStart(2,'0')}:${String(cd.getMinutes()).padStart(2,'0')}`;
+      return `<div class="comment"><div class="meta">ANON · ${ctime}</div><div class="body">${escapeHtml(c.text)}</div></div>`;
+    }).join('');
+    return `<div class="post" data-id="${p.id}">
+      <div class="meta">ANON · ${time}</div>
+      <div class="body">${escapeHtml(p.text)}</div>
+      <div class="comments">
+        ${comments.length ? commentsHtml : ''}
+        <button class="comment-toggle" onclick="toggleCommentForm('${p.id}')">${comments.length ? `댓글 ${comments.length}` : '댓글 달기'}</button>
+        <div class="comment-form" id="cform-${p.id}" style="display:none;">
+          <input id="cinput-${p.id}" placeholder="익명 댓글..." onkeydown="if(event.key==='Enter')submitComment('${p.id}')">
+          <button onclick="submitComment('${p.id}')">등록</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function toggleCommentForm(id){
+  const el = document.getElementById('cform-'+id);
+  el.style.display = el.style.display==='none' ? 'flex' : 'none';
+  if(el.style.display==='flex') document.getElementById('cinput-'+id).focus();
+}
+async function submitComment(id){
+  const input = document.getElementById('cinput-'+id);
+  const text = input.value.trim();
+  if(!text) return;
+  const post = boardPosts.find(p=>p.id===id);
+  if(!post) return;
+  if(!post.comments) post.comments = [];
+  post.comments.push({text, ts: Date.now()});
+  input.value = '';
+  await saveBoard();
+  renderBoard();
+}
+async function submitPost(){
+  const ta = document.getElementById('postInput');
+  const text = ta.value.trim();
+  if(!text) return;
+  boardPosts.push({id: uid(), text, ts: Date.now(), comments: []});
+  ta.value = '';
+  await saveBoard();
+  renderBoard();
+}
+</script>
+</body>
+</html>
